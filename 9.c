@@ -1,96 +1,250 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <limits.h>
 
-#define FIXED_SIZE 20
+#define SIZE 10
 
-void process_fixed_array(int arr[], const int size) {
-    int min_idx = 0, max_idx = 0;
-    for (int i = 1; i < size; i++) {
-        if (arr[i] < arr[min_idx]) min_idx = i;
-        if (arr[i] > arr[max_idx]) max_idx = i;
+typedef enum {
+    OK = 0,
+    INVALID_NUMBER,
+    OUT_OF_RANGE,
+    MEMORY_ERROR,
+    OVERFLOW
+} Status;
+
+Status parse_number(const char *str, int *x) {
+    long long number = 0;
+    int i = 0;
+    int negative = 0;
+
+    if (str == NULL || x == NULL || str[0] == '\0')
+        return INVALID_NUMBER;
+
+    if (str[0] == '-' || str[0] == '+') {
+        negative = (str[0] == '-');
+        i = 1;
     }
-    int temp = arr[min_idx];
-    arr[min_idx] = arr[max_idx];
-    arr[max_idx] = temp;
+
+    if (str[i] == '\0')
+        return INVALID_NUMBER;
+
+    long long limit = negative ? -(long long)INT_MIN : INT_MAX;
+
+    for (; str[i] != '\0'; i++) {
+        if (str[i] < '0' || str[i] > '9')
+            return INVALID_NUMBER;
+
+        int digit = str[i] - '0';
+
+        if (number > (limit - digit) / 10)
+            return OUT_OF_RANGE;
+
+        number = number * 10 + digit;
+    }
+
+    *x = negative ? (int)(-number) : (int)number;
+
+    return OK;
 }
 
-int find_closest(const int target, const int arr[], const int size) {
-    int closest = arr[0];
-    int min_diff = abs(target - arr[0]);
+Status fill_array(int arr[], int size, int a, int b) {
+    if (arr == NULL || size <= 0)
+        return INVALID_NUMBER;
+
+    if (a > b)
+        return OUT_OF_RANGE;
+
+    long long range = (long long)b - a + 1;
+
+    for (int i = 0; i < size; i++) {
+        long long offset = (long long)((double)rand() / ((double)RAND_MAX + 1.0) * range);
+
+        arr[i] = (int)((long long)a + offset);
+    }
+
+    return OK;
+}
+
+Status swap_min_max(int arr[], int size, int *min_value, int *max_value) {
+    if (arr == NULL || min_value == NULL || max_value == NULL || size <= 0)
+        return INVALID_NUMBER;
+
+    int min_index = 0;
+    int max_index = 0;
+
     for (int i = 1; i < size; i++) {
-        int diff = abs(target - arr[i]);
-        if (diff < min_diff) {
-            min_diff = diff;
-            closest = arr[i];
+        if (arr[i] < arr[min_index])
+            min_index = i;
+
+        if (arr[i] > arr[max_index])
+            max_index = i;
+    }
+
+    *min_value = arr[min_index];
+    *max_value = arr[max_index];
+
+    int temp = arr[min_index];
+    arr[min_index] = arr[max_index];
+    arr[max_index] = temp;
+
+    return OK;
+}
+
+Status create_array_c(const int A[], int size_a, const int B[], int size_b, int C[]) {
+    if (A == NULL || B == NULL || C == NULL || size_a <= 0 || size_b <= 0)
+        return INVALID_NUMBER;
+
+    for (int i = 0; i < size_a; i++) {
+        int closest = B[0];
+        long long min_diff = (long long)A[i] - B[0];
+
+        if (min_diff < 0)
+            min_diff = -min_diff;
+
+        for (int j = 1; j < size_b; j++) {
+            long long diff = (long long)A[i] - B[j];
+
+            if (diff < 0)
+                diff = -diff;
+
+            if (diff < min_diff) {
+                min_diff = diff;
+                closest = B[j];
+            }
         }
-    }
-    return closest;
-}
 
-void print_array(const char *label, const int arr[], const int size) {
-    printf("%s: ", label);
-    for (int i = 0; i < size && i < 10; i++) {
-        printf("%d ", arr[i]);
+        long long sum = (long long)A[i] + closest;
+
+        if (sum < INT_MIN || sum > INT_MAX)
+            return OVERFLOW;
+
+        C[i] = (int)sum;
     }
-    if (size > 10) printf("...");
-    printf("\n");
+
+    return OK;
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        printf("Error: usage: %s <a> <b>\n", argv[0]);
+        printf("Ошибка: необходимо два аргумента.\n");
         return 1;
     }
 
-    int a = atoi(argv[1]);
-    int b = atoi(argv[2]);
+    int a, b;
+    int arr[SIZE];
+    int min_value, max_value;
 
-    if (a > b) {
-        printf("Error: a must be <= b.\n");
+    Status status = parse_number(argv[1], &a);
+
+    if (status == OK)
+        status = parse_number(argv[2], &b);
+
+    if (status == OK && a > b)
+        status = OUT_OF_RANGE;
+
+    if (status != OK) {
+        if (status == INVALID_NUMBER)
+            printf("Ошибка: некорректное число.\n");
+        else
+            printf("Ошибка: неверный диапазон.\n");
+
         return 1;
     }
 
-    srand(time(NULL));
+    srand((unsigned int)time(NULL));
 
-    printf("Part 1: Fixed-size array\n");
-    int fixed_arr[FIXED_SIZE];
-    for (int i = 0; i < FIXED_SIZE; i++) {
-        fixed_arr[i] = rand() % (b - a + 1) + a;
+    status = fill_array(arr, SIZE, a, b);
+
+    if (status != OK) {
+        printf("Ошибка заполнения массива.\n");
+        return 1;
     }
 
-    print_array("Before", fixed_arr, FIXED_SIZE);
-    process_fixed_array(fixed_arr, FIXED_SIZE);
-    print_array("After ", fixed_arr, FIXED_SIZE);
+    printf("Задание 9.1\n");
+    printf("Исходный массив:\n");
 
-    printf("\nPart 2: Dynamic arrays\n");
-    int n = rand() % (10000 - 10 + 1) + 10;
-    printf("Random size N = %d\n", n);
+    for (int i = 0; i < SIZE; i++)
+        printf("%d ", arr[i]);
 
-    int *A = malloc(n * sizeof(int));
-    int *B = malloc(n * sizeof(int));
-    int *C = malloc(n * sizeof(int));
+    printf("\n");
+
+    status = swap_min_max(arr, SIZE, &min_value, &max_value);
+
+    if (status != OK) {
+        printf("Ошибка обработки массива.\n");
+        return 1;
+    }
+
+    printf("Минимум: %d\n", min_value);
+    printf("Максимум: %d\n", max_value);
+
+    printf("Массив после обмена:\n");
+
+    for (int i = 0; i < SIZE; i++)
+        printf("%d ", arr[i]);
+
+    printf("\n\n");
+
+    int size_a = 10 + rand() % 9991;
+    int size_b = 10 + rand() % 9991;
+
+    int *A = malloc(size_a * sizeof(int));
+    int *B = malloc(size_b * sizeof(int));
+    int *C = malloc(size_a * sizeof(int));
 
     if (A == NULL || B == NULL || C == NULL) {
-        printf("Error: memory allocation failed.\n");
+        printf("Ошибка выделения памяти.\n");
+
         free(A);
         free(B);
         free(C);
+
         return 1;
     }
 
-    for (int i = 0; i < n; i++) {
-        A[i] = rand() % 2001 - 1000;
-        B[i] = rand() % 2001 - 1000;
+    status = fill_array(A, size_a, -1000, 1000);
+
+    if (status == OK)
+        status = fill_array(B, size_b, -1000, 1000);
+
+    if (status == OK)
+        status = create_array_c(A, size_a, B, size_b, C);
+
+    if (status != OK) {
+        printf("Ошибка создания массивов.\n");
+
+        free(A);
+        free(B);
+        free(C);
+
+        return 1;
     }
 
-    for (int i = 0; i < n; i++) {
-        C[i] = A[i] + find_closest(A[i], B, n);
-    }
+    printf("Задание 9.2\n");
+    printf("Размер A: %d\n", size_a);
+    printf("Размер B: %d\n", size_b);
+    printf("Размер C: %d\n\n", size_a);
 
-    print_array("A", A, n);
-    print_array("B", B, n);
-    print_array("C", C, n);
+    printf("Первые 10 элементов A:\n");
+
+    for (int i = 0; i < 10; i++)
+        printf("%d ", A[i]);
+
+    printf("\nПервые 10 элементов B:\n");
+
+    for (int i = 0; i < 10; i++)
+        printf("%d ", B[i]);
+
+    printf("\nПервые 10 элементов C:\n");
+
+    for (int i = 0; i < 10; i++)
+        printf("%d ", C[i]);
+
+    printf("\n\nПроверка первых 10 элементов C:\n");
+
+    for (int i = 0; i < 10; i++)
+        printf("%d + %d = %d\n", A[i], C[i] - A[i], C[i]);
 
     free(A);
     free(B);

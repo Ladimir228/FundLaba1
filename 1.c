@@ -1,135 +1,338 @@
 #include <stdio.h>
+#include <limits.h>
 
-typedef unsigned long long ull;
+typedef enum {
+    OK = 0,
+    INVALID_NUMBER,
+    OUT_OF_RANGE,
+    INVALID_FLAG,
+    OVERFLOW
+} Status;
 
-int FlagH(const ull x) {
-    int found = 0;
-    printf("Multiples of %llu up to 100: ", x);
-    for (ull i = x; i <= 100; i += x) {
-        printf("%llu ", i);
-        found = 1;
+Status parse_number(const char *str, int *x) {
+    int number = 0;
+    int i = 0;
+    int negative = 0;
+
+    if (str == NULL || x == NULL || str[0] == '\0')
+        return INVALID_NUMBER;
+
+    if (str[0] == '-' || str[0] == '+') {
+        negative = (str[0] == '-');
+        i = 1;
     }
-    if (!found) {
-        printf("No multiples found.");
+
+    if (str[i] == '\0')
+        return INVALID_NUMBER;
+
+    for (; str[i] != '\0'; i++) {
+        if (str[i] < '0' || str[i] > '9')
+            return INVALID_NUMBER;
+
+        int digit = str[i] - '0';
+
+        if (number > (INT_MAX - digit) / 10)
+            return OUT_OF_RANGE;
+
+        number = number * 10 + digit;
     }
-    printf("\n");
-    return 0;
+
+    if (negative || number == 0)
+        return OUT_OF_RANGE;
+
+    *x = number;
+    return OK;
 }
 
-int FlagP(const ull x) {
-    if (x < 2) {
-        printf("%llu is neither prime nor composite.\n", x);
-        return 0;
+Status parse_flag(const char *str, char *flag) {
+    if (str == NULL || flag == NULL)
+        return INVALID_FLAG;
+
+    if (str[0] != '-' && str[0] != '/')
+        return INVALID_FLAG;
+
+    if (str[1] == '\0' || str[2] != '\0')
+        return INVALID_FLAG;
+
+    switch (str[1]) {
+        case 'h':
+        case 'p':
+        case 's':
+        case 'e':
+        case 'a':
+        case 'f':
+            *flag = str[1];
+            return OK;
+
+        default:
+            return INVALID_FLAG;
     }
-    int prime = 1;
-    if (x > 2 && x % 2 == 0) {
-        prime = 0;
-    } else {
-        for (ull i = 3; i * i <= x; i += 2) {
-            if (x % i == 0) {
-                prime = 0;
-                break;
-            }
+}
+
+Status find_multiples(int x, int numbers[100], int *count) {
+    if (numbers == NULL || count == NULL)
+        return INVALID_NUMBER;
+
+    if (x < 1)
+        return OUT_OF_RANGE;
+
+    *count = 0;
+
+    for (int i = 1; i <= 100; i++) {
+        if (i % x == 0) {
+            numbers[*count] = i;
+            (*count)++;
         }
     }
-    if (prime) {
-        printf("%llu is prime.\n", x);
-    } else {
-        printf("%llu is composite.\n", x);
-    }
-    return 0;
+
+    return OK;
 }
 
-int FlagS(const ull x) {
-    char buf[64];
-    sprintf(buf, "%llX", x);
-    printf("Hex digits: ");
-    for (int i = 0; buf[i] != '\0'; i++) {
-        printf("%c", buf[i]);
-        if (buf[i + 1] != '\0') {
-            printf(" ");
+Status check_prime(int x, int *result) {
+    if (result == NULL)
+        return INVALID_NUMBER;
+
+    if (x < 1)
+        return OUT_OF_RANGE;
+
+    if (x == 1) {
+        *result = 0;
+        return OK;
+    }
+
+    *result = 1;
+
+    for (int i = 2; i <= x / i; i++) {
+        if (x % i == 0) {
+            *result = 2;
+            break;
         }
     }
-    printf("\n");
-    return 0;
+
+    return OK;
 }
 
-int FlagE(const ull x) {
-    if (x > 10) {
-        printf("Error: x must be <= 10 for flag -e.\n");
-        return -1;
+Status to_hex(int x, char *hex, int size) {
+    if (hex == NULL || size < 2)
+        return INVALID_NUMBER;
+
+    if (x < 1)
+        return OUT_OF_RANGE;
+
+    const char digits[] = "0123456789ABCDEF";
+    int count = 0;
+
+    while (x > 0) {
+        if (count >= size - 1)
+            return OUT_OF_RANGE;
+
+        hex[count] = digits[x % 16];
+        count++;
+        x /= 16;
     }
-    printf("Table of powers (bases 1-10, exponents 1-%llu):\n", x);
+
+    hex[count] = '\0';
+
+    for (int i = 0; i < count / 2; i++) {
+        char temp = hex[i];
+        hex[i] = hex[count - 1 - i];
+        hex[count - 1 - i] = temp;
+    }
+
+    return OK;
+}
+
+Status calculate_powers(int x, long long table[10][10]) {
+    if (table == NULL)
+        return INVALID_NUMBER;
+
+    if (x < 1 || x > 10)
+        return OUT_OF_RANGE;
+
     for (int base = 1; base <= 10; base++) {
-        printf("Base %d: ", base);
-        for (ull exp = 1; exp <= x; exp++) {
-            ull val = 1;
-            for (ull k = 0; k < exp; k++) {
-                val *= base;
-            }
-            printf("%llu ", val);
+        long long power = 1;
+
+        for (int exponent = 1; exponent <= x; exponent++) {
+            if (power > LLONG_MAX / base)
+                return OVERFLOW;
+
+            power *= base;
+            table[base - 1][exponent - 1] = power;
         }
-        printf("\n");
     }
-    return 0;
+
+    return OK;
 }
 
-int FlagA(const ull x) {
-    ull sum = 0;
-    for (ull i = 1; i <= x; i++) {
-        sum += i;
-    }
-    printf("Sum of 1 to %llu: %llu\n", x, sum);
-    return 0;
+Status calculate_sum(int x, long long *result) {
+    if (result == NULL)
+        return INVALID_NUMBER;
+
+    if (x < 1)
+        return OUT_OF_RANGE;
+
+    *result = (long long)x * (x + 1LL) / 2;
+
+    return OK;
 }
 
-int FlagF(const ull x) {
-    if (x > 20) {
-        printf("Error: x is too large for factorial (max 20).\n");
-        return -1;
+Status calculate_factorial(int x, long long *result) {
+    if (result == NULL)
+        return INVALID_NUMBER;
+
+    if (x < 1)
+        return OUT_OF_RANGE;
+
+    long long factorial = 1;
+
+    for (int i = 2; i <= x; i++) {
+        if (factorial > LLONG_MAX / i)
+            return OVERFLOW;
+
+        factorial *= i;
     }
-    ull fact = 1;
-    for (ull i = 1; i <= x; i++) {
-        fact *= i;
-    }
-    printf("Factorial of %llu: %llu\n", x, fact);
-    return 0;
+
+    *result = factorial;
+    return OK;
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        printf("Error: usage: %s <x> <flag>\n", argv[0]);
+        printf("Ошибка: необходимо два аргумента.\n");
         return 1;
     }
 
-    ull x;
-    if (argv[1][0] == '-') {
-        printf("Error: x must be positive\n");
-        return 1;
+    int x = 0;
+    char flag = '\0';
+    Status status;
+
+    long long result = 0;
+    int numbers[100];
+    int count = 0;
+    int prime_result = 0;
+    char hex[20];
+    long long table[10][10];
+
+    status = parse_number(argv[1], &x);
+
+    if (status == OK)
+        status = parse_flag(argv[2], &flag);
+
+    if (status == OK) {
+        switch (flag) {
+            case 'h':
+                status = find_multiples(x, numbers, &count);
+                break;
+
+            case 'p':
+                status = check_prime(x, &prime_result);
+                break;
+
+            case 's':
+                status = to_hex(x, hex, sizeof(hex));
+                break;
+
+            case 'e':
+                status = calculate_powers(x, table);
+                break;
+
+            case 'a':
+                status = calculate_sum(x, &result);
+                break;
+
+            case 'f':
+                status = calculate_factorial(x, &result);
+                break;
+
+            default:
+                status = INVALID_FLAG;
+                break;
+        }
     }
 
-    if (sscanf(argv[1], "%llu", &x) != 1 || x == 0) {
-        printf("Error: x must be a positive integer\n");
+    if (status != OK) {
+        switch (status) {
+            case INVALID_NUMBER:
+                printf("Ошибка: некорректное число.\n");
+                break;
+
+            case OUT_OF_RANGE:
+                printf("Ошибка: число вне допустимого диапазона.\n");
+                break;
+
+            case INVALID_FLAG:
+                printf("Ошибка: неизвестный флаг.\n");
+                break;
+
+            case OVERFLOW:
+                printf("Ошибка: переполнение.\n");
+                break;
+
+            default:
+                printf("Неизвестная ошибка.\n");
+                break;
+        }
+
         return 1;
     }
-
-    if (argv[2][0] != '-' && argv[2][0] != '/') {
-        printf("Error: flag must start with '-' or '/'.\n");
-        return 1;
-    }
-
-    char flag = argv[2][1];
 
     switch (flag) {
-        case 'h': FlagH(x); break;
-        case 'p': FlagP(x); break;
-        case 's': FlagS(x); break;
-        case 'e': FlagE(x); break;
-        case 'a': FlagA(x); break;
-        case 'f': FlagF(x); break;
-        default:
-            printf("Error: unknown flag '%c'. Available: -h, -p, -s, -e, -a, -f.\n", flag);
-            return 1;
+        case 'h':
+            if (count == 0) {
+                printf("Кратных чисел нет.\n");
+            } else {
+                printf("Числа, кратные %d:\n", x);
+
+                for (int i = 0; i < count; i++)
+                    printf("%d ", numbers[i]);
+
+                printf("\n");
+            }
+            break;
+
+        case 'p':
+            if (prime_result == 0)
+                printf("Число 1 не является ни простым, ни составным.\n");
+            else if (prime_result == 1)
+                printf("Число %d простое.\n", x);
+            else
+                printf("Число %d составное.\n", x);
+            break;
+
+        case 's':
+            printf("Шестнадцатеричные цифры: ");
+
+            for (int i = 0; hex[i] != '\0'; i++)
+                printf("%c ", hex[i]);
+
+            printf("\n");
+            break;
+
+        case 'e':
+            printf("Base/Exp");
+
+            for (int i = 1; i <= x; i++)
+                printf("%13d", i);
+
+            printf("\n");
+
+            for (int base = 1; base <= 10; base++) {
+                printf("%8d", base);
+
+                for (int i = 0; i < x; i++)
+                    printf("%13lld", table[base - 1][i]);
+
+                printf("\n");
+            }
+            break;
+
+        case 'a':
+            printf("Сумма = %lld\n", result);
+            break;
+
+        case 'f':
+            printf("Факториал = %lld\n", result);
+            break;
     }
 
     return 0;

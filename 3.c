@@ -1,166 +1,374 @@
 #include <stdio.h>
+#include <limits.h>
 #include <math.h>
 
-int solve_quadratic(const double a, const double b, const double c, const double eps, double *x1, double *x2) {
-    if (fabs(a) < eps) {
-        if (fabs(b) < eps) {
-            return 0;
-        }
-        *x1 = -c / b;
-        return 1;
+typedef enum {
+    OK = 0,
+    INVALID_NUMBER,
+    OUT_OF_RANGE,
+    INVALID_FLAG,
+    INVALID_COUNT
+} Status;
+
+Status parse_number(const char *str, int *x) {
+    long long number = 0;
+    int i = 0;
+    int negative = 0;
+
+    if (str == NULL || x == NULL || str[0] == '\0')
+        return INVALID_NUMBER;
+
+    if (str[0] == '-' || str[0] == '+') {
+        negative = (str[0] == '-');
+        i = 1;
     }
 
-    double d = b * b - 4 * a * c;
+    if (str[i] == '\0')
+        return INVALID_NUMBER;
 
-    if (d < -eps) {
-        return 0;
-    }
-    if (fabs(d) <= eps) {
-        *x1 = -b / (2 * a);
-        return 1;
+    long long limit = negative ? -(long long)INT_MIN : INT_MAX;
+
+    for (; str[i] != '\0'; i++) {
+        if (str[i] < '0' || str[i] > '9')
+            return INVALID_NUMBER;
+
+        int digit = str[i] - '0';
+
+        if (number > (limit - digit) / 10)
+            return OUT_OF_RANGE;
+
+        number = number * 10 + digit;
     }
 
-    d = sqrt(d);
-    *x1 = (-b + d) / (2 * a);
-    *x2 = (-b - d) / (2 * a);
-    return 2;
+    if (number == 0)
+        return OUT_OF_RANGE;
+
+    *x = negative ? (int)(-number) : (int)number;
+
+    return OK;
 }
 
-int FlagQ(int argc, char *argv[]) {
-    if (argc != 6) {
-        printf("Error: flag -q requires 4 parameters (epsilon and 3 coefficients).\n");
-        return 1;
+Status parse_real(const char *str, double *x) {
+    char extra;
+
+    if (str == NULL || x == NULL || str[0] == '\0')
+        return INVALID_NUMBER;
+
+    if (sscanf(str, "%lf %c", x, &extra) != 1)
+        return INVALID_NUMBER;
+
+    if (!isfinite(*x))
+        return OUT_OF_RANGE;
+
+    return OK;
+}
+
+Status parse_flag(const char *str, char *flag) {
+    if (str == NULL || flag == NULL)
+        return INVALID_FLAG;
+
+    if (str[0] != '-' && str[0] != '/')
+        return INVALID_FLAG;
+
+    if (str[1] == '\0' || str[2] != '\0')
+        return INVALID_FLAG;
+
+    switch (str[1]) {
+        case 'q':
+        case 'm':
+        case 't':
+            *flag = str[1];
+            return OK;
+
+        default:
+            return INVALID_FLAG;
+    }
+}
+
+Status check_multiple(int a, int b, int *result) {
+    if (result == NULL || a == 0 || b == 0)
+        return INVALID_NUMBER;
+
+    if (b == -1)
+        *result = 1;
+    else
+        *result = (a % b == 0);
+
+    return OK;
+}
+
+Status check_triangle(double eps, double a, double b, double c, int *result) {
+    if (result == NULL)
+        return INVALID_NUMBER;
+
+    if (!isfinite(eps) || eps <= 0)
+        return OUT_OF_RANGE;
+
+    if (!isfinite(a) || !isfinite(b) || !isfinite(c))
+        return OUT_OF_RANGE;
+
+    if (a <= eps || b <= eps || c <= eps)
+        return OUT_OF_RANGE;
+
+    if (a + b <= c + eps ||
+        a + c <= b + eps ||
+        b + c <= a + eps) {
+        *result = 0;
+        return OK;
     }
 
-    double eps, a, b, c;
-    if (sscanf(argv[2], "%lf", &eps) != 1 || eps <= 0 ||
-        sscanf(argv[3], "%lf", &a) != 1 ||
-        sscanf(argv[4], "%lf", &b) != 1 ||
-        sscanf(argv[5], "%lf", &c) != 1) {
-        printf("Error: invalid number format.\n");
-        return 1;
+    double a2 = a * a;
+    double b2 = b * b;
+    double c2 = c * c;
+
+    if (!isfinite(a2 + b2) || !isfinite(a2 + c2) || !isfinite(b2 + c2))
+        return OUT_OF_RANGE;
+
+    *result = fabs(a2 + b2 - c2) <= eps || fabs(a2 + c2 - b2) <= eps || fabs(b2 + c2 - a2) <= eps;
+
+    return OK;
+}
+
+Status solve_equation(double eps, double a, double b, double c, int *type, double roots[2]) {
+    if (type == NULL || roots == NULL)
+        return INVALID_NUMBER;
+
+    if (!isfinite(eps) || eps <= 0)
+        return OUT_OF_RANGE;
+
+    if (!isfinite(a) || !isfinite(b) || !isfinite(c))
+        return OUT_OF_RANGE;
+
+    if (fabs(a) <= eps) {
+        if (fabs(b) <= eps) {
+            if (fabs(c) <= eps)
+                *type = 3;
+            else
+                *type = 0;
+        } else {
+            roots[0] = -c / b;
+            *type = 1;
+        }
+    } else {
+        double d = b * b - 4 * a * c;
+
+        if (!isfinite(d))
+            return OUT_OF_RANGE;
+
+        if (d < -eps)
+            *type = 0;
+        else if (fabs(d) <= eps) {
+            roots[0] = -b / (2 * a);
+            *type = 1;
+        } else {
+            roots[0] = (-b - sqrt(d)) / (2 * a);
+            roots[1] = (-b + sqrt(d)) / (2 * a);
+            *type = 2;
+        }
     }
 
-    double perms[6][3] = {
-        {a, b, c}, {a, c, b}, {b, a, c},
-        {b, c, a}, {c, a, b}, {c, b, a}
-    };
+    if (*type == 1 && !isfinite(roots[0]))
+        return OUT_OF_RANGE;
 
-    printf("Solving quadratic equations\n");
-    for (int i = 0; i < 6; i++) {
-        int is_duplicate = 0;
-        for (int j = 0; j < i; j++) {
-            if (fabs(perms[i][0] - perms[j][0]) < eps &&
-                fabs(perms[i][1] - perms[j][1]) < eps &&
-                fabs(perms[i][2] - perms[j][2]) < eps) {
-                is_duplicate = 1;
-                break;
+    if (*type == 2 && (!isfinite(roots[0]) || !isfinite(roots[1])))
+        return OUT_OF_RANGE;
+
+    return OK;
+}
+
+Status solve_permutations(double eps, const double numbers[3], double coefficients[6][3], int types[6], double roots[6][2], int *count) {
+    if (numbers == NULL || coefficients == NULL ||
+        types == NULL || roots == NULL || count == NULL)
+        return INVALID_NUMBER;
+
+    if (!isfinite(eps) || eps <= 0)
+        return OUT_OF_RANGE;
+
+    for (int i = 0; i < 3; i++) {
+        if (!isfinite(numbers[i]))
+            return OUT_OF_RANGE;
+    }
+
+    *count = 0;
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (i == j)
+                continue;
+
+            for (int k = 0; k < 3; k++) {
+                if (k == i || k == j)
+                    continue;
+
+                double a = numbers[i];
+                double b = numbers[j];
+                double c = numbers[k];
+
+                int repeat = 0;
+
+                for (int p = 0; p < *count; p++) {
+                    if (fabs(coefficients[p][0] - a) <= eps && fabs(coefficients[p][1] - b) <= eps && fabs(coefficients[p][2] - c) <= eps) {
+                        repeat = 1;
+                        break;
+                    }
+                }
+
+                if (repeat)
+                    continue;
+
+                coefficients[*count][0] = a;
+                coefficients[*count][1] = b;
+                coefficients[*count][2] = c;
+
+                Status status = solve_equation(eps, a, b, c, &types[*count], roots[*count]);
+
+                if (status != OK)
+                    return status;
+
+                (*count)++;
             }
         }
-        if (is_duplicate) continue;
-
-        double x1, x2;
-        int roots = solve_quadratic(perms[i][0], perms[i][1], perms[i][2], eps, &x1, &x2);
-
-        printf("Coefficients: a=%g, b=%g, c=%g\n", perms[i][0], perms[i][1], perms[i][2]);
-        if (roots == 0) {
-            printf("  No real roots.\n");
-        } else if (roots == 1) {
-            printf("  One root: x = %g\n", x1);
-        } else if (roots == 2) {
-            printf("  Two roots: x1 = %g, x2 = %g\n", x1, x2);
-        }
-    }
-    return 0;
-}
-
-int FlagM(int argc, char *argv[]) {
-    if (argc != 4) {
-        printf("Error: flag -m requires 2 parameters (two integers).\n");
-        return 1;
     }
 
-    int num1, num2;
-    if (sscanf(argv[2], "%d", &num1) != 1 || sscanf(argv[3], "%d", &num2) != 1) {
-        printf("Error: invalid integer format.\n");
-        return 1;
-    }
-    if (num1 == 0 || num2 == 0) {
-        printf("Error: numbers must be non-zero.\n");
-        return 1;
-    }
-
-    if (num1 % num2 == 0) {
-        printf("%d is a multiple of %d.\n", num1, num2);
-    } else {
-        printf("%d is not a multiple of %d.\n", num1, num2);
-    }
-    return 0;
-}
-
-int FlagT(int argc, char *argv[]) {
-    if (argc != 6) {
-        printf("Error: flag -t requires 4 parameters (epsilon and 3 sides).\n");
-        return 1;
-    }
-
-    double eps, a, b, c;
-    if (sscanf(argv[2], "%lf", &eps) != 1 || eps <= 0 ||
-        sscanf(argv[3], "%lf", &a) != 1 ||
-        sscanf(argv[4], "%lf", &b) != 1 ||
-        sscanf(argv[5], "%lf", &c) != 1) {
-        printf("Error: invalid number format.\n");
-        return 1;
-    }
-
-    if (a <= 0 || b <= 0 || c <= 0) {
-        printf("Error: sides must be positive numbers.\n");
-        return 1;
-    }
-
-    double sides[3] = {a, b, c};
-
-    for (int i = 0; i < 2; i++) {
-        for (int j = i + 1; j < 3; j++) {
-            if (sides[i] > sides[j]) {
-                double temp = sides[i];
-                sides[i] = sides[j];
-                sides[j] = temp;
-            }
-        }
-    }
-
-    double sum_sq = sides[0] * sides[0] + sides[1] * sides[1];
-    double hyp_sq = sides[2] * sides[2];
-
-    if (fabs(sum_sq - hyp_sq) < eps) {
-        printf("The numbers %g, %g, %g can be sides of a right-angled triangle.\n", a, b, c);
-    } else {
-        printf("The numbers %g, %g, %g cannot be sides of a right-angled triangle.\n", a, b, c);
-    }
-    return 0;
+    return OK;
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 3) {
-        printf("Error: too few arguments.\n");
+    if (argc < 2) {
+        printf("Ошибка: необходимо указать флаг.\n");
         return 1;
     }
 
-    if (argv[1][0] != '-' && argv[1][0] != '/') {
-        printf("Error: flag must start with '-' or '/'.\n");
+    char flag;
+    Status status = parse_flag(argv[1], &flag);
+
+    if (status != OK) {
+        printf("Ошибка: неизвестный флаг.\n");
         return 1;
     }
 
-    char flag = argv[1][1];
+    int required_count = 6;
+
+    if (flag == 'm')
+        required_count = 4;
+
+    if (argc != required_count) {
+        printf("Ошибка: неверное количество аргументов.\n");
+        return 1;
+    }
 
     switch (flag) {
-        case 'q': FlagQ(argc, argv); break;
-        case 'm': FlagM(argc, argv); break;
-        case 't': FlagT(argc, argv); break;
-        default:
-            printf("Error: unknown flag '%c'. Available: -q, -m, -t.\n", flag);
-            return 1;
+        case 'm': {
+            int a, b;
+            int result;
+
+            status = parse_number(argv[2], &a);
+
+            if (status == OK)
+                status = parse_number(argv[3], &b);
+
+            if (status == OK)
+                status = check_multiple(a, b, &result);
+
+            if (status == OK) {
+                if (result)
+                    printf("%d кратно %d\n", a, b);
+                else
+                    printf("%d не кратно %d\n", a, b);
+            }
+
+            break;
+        }
+
+        case 't': {
+            double eps, a, b, c;
+            int result;
+
+            status = parse_real(argv[2], &eps);
+
+            if (status == OK)
+                status = parse_real(argv[3], &a);
+
+            if (status == OK)
+                status = parse_real(argv[4], &b);
+
+            if (status == OK)
+                status = parse_real(argv[5], &c);
+
+            if (status == OK)
+                status = check_triangle(eps, a, b, c, &result);
+
+            if (status == OK) {
+                if (result)
+                    printf("Треугольник прямоугольный.\n");
+                else
+                    printf("Треугольник не прямоугольный.\n");
+            }
+
+            break;
+        }
+
+        case 'q': {
+            double eps;
+            double numbers[3];
+            double coefficients[6][3];
+            double roots[6][2];
+            int types[6];
+            int count = 0;
+
+            status = parse_real(argv[2], &eps);
+
+            for (int i = 0; i < 3 && status == OK; i++)
+                status = parse_real(argv[i + 3], &numbers[i]);
+
+            if (status == OK)
+                status = solve_permutations(eps, numbers, coefficients, types, roots, &count);
+
+            if (status == OK) {
+                for (int i = 0; i < count; i++) {
+                    printf("\n%.10g*x^2 + %.10g*x + %.10g = 0\n", coefficients[i][0], coefficients[i][1], coefficients[i][2]);
+
+                    switch (types[i]) {
+                        case 0:
+                            printf("Нет действительных корней.\n");
+                            break;
+
+                        case 1:
+                            printf("x = %.10g\n", roots[i][0]);
+                            break;
+
+                        case 2:
+                            printf("x1 = %.10g\n", roots[i][0]);
+                            printf("x2 = %.10g\n", roots[i][1]);
+                            break;
+
+                        case 3:
+                            printf("Бесконечно много решений.\n");
+                            break;
+                    }
+                }
+            }
+
+            break;
+        }
+    }
+
+    if (status != OK) {
+        switch (status) {
+            case INVALID_NUMBER:
+                printf("Ошибка: некорректное число.\n");
+                break;
+
+            case OUT_OF_RANGE:
+                printf("Ошибка: число вне допустимого диапазона.\n");
+                break;
+
+            default:
+                printf("Ошибка вычисления.\n");
+                break;
+        }
+
+        return 1;
     }
 
     return 0;
